@@ -49,7 +49,7 @@ class Connection:
                 raise NetstringError("Cannot receive more data: received closed")
             self._receive_buffer += data
         else:
-            self._receive_buffer_closed = True
+            self.close()
 
     def next_event(self):
         """Parse the next event out of our receive buffer, update our internal
@@ -82,3 +82,7 @@ class Connection:
         result = self._receive_buffer[start:end - 1]
         self._receive_buffer = self._receive_buffer[end:]
         return result
+
+    def close(self):
+        self._receive_buffer_closed = True
+        self._receive_buffer = b""
