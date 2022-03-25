@@ -94,3 +94,25 @@ class Connection:
     def close(self):
         self._receive_buffer_closed = True
         self._receive_buffer = b""
+
+
+def stream_data(conn, data):
+    """Feeds the connection with the given data and yields its events"""
+    conn.receive_data(data)
+    while (event := conn.next_event()) not in {None, NEED_DATA}:
+        yield event
+
+
+def stream(reader, size=4096):
+    """Consumes the reader yielding its events"""
+    conn = Connection()
+    while data := reader.read(size):
+        yield from stream_data(conn, data)
+
+
+async def async_stream(reader, size=4096):
+    """Consumes the async reader yielding its events"""
+    conn = Connection()
+    while data := await reader.read(size):
+        for event in stream_data(conn, data):
+            yield event

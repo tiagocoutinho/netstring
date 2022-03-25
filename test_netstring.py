@@ -1,8 +1,10 @@
+import io
+
 import pytest
 from hypothesis import given, example
 from hypothesis.strategies import binary
 
-from netstring import Connection, NetstringError, NEED_DATA
+from netstring import Connection, NetstringError, NEED_DATA, stream_data, stream, async_stream
 
 
 DATA_EVENTS = [
@@ -14,7 +16,12 @@ DATA_EVENTS = [
     (b'14:14:recursive2,,', [b'14:recursive2,'], None),
     (b'3:foo,', [b"foo"], None),
     (b'46:{"id": 0, "method": "hello", "jsonrpc": "2.0"},', [b'{"id": 0, "method": "hello", "jsonrpc": "2.0"}'], None),
+    (2*(b'1000000:'+1000000*b'$'+b','), 2*[+1000000*b'$'], None),
 ]
+
+def idfn(v):
+    if isinstance(v, bytes):
+        return v[:15] + b'[...]' if len(v) > 20 else v[:20]
 
 
 @given(binary())
@@ -46,7 +53,7 @@ def test_netstring(payload):
         conn.receive_data(b"Hello, world!")
 
 
-@pytest.mark.parametrize("data, events, error", DATA_EVENTS)
+@pytest.mark.parametrize("data, events, error", DATA_EVENTS, ids=idfn)
 def test_concrete(data, events, error):
     conn = Connection()
     if error:
@@ -96,3 +103,39 @@ def test_close():
     conn.receive_data(b"")
     with pytest.raises(NetstringError):
         conn.receive_data(b"Hello, world!")
+
+
+@pytest.mark.parametrize("data, events, error", DATA_EVENTS, ids=idfn)
+def test_stream(data, events, error):
+    reader = io.BytesIO(data)
+    strm = stream(reader)
+    if error:
+        with pytest.raises(error):
+            evts = []
+            for event in strm:
+                evts.append(event)
+        assert evts == events
+    else:
+        assert list(strm) == events
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("data, events, error", DATA_EVENTS, ids=idfn)
+async def test_async_stream(data, events, error):
+    class Reader:
+        async def read(self, size):
+            result = self.data[:size]
+            self.data = self.data[size:]
+            return result
+    reader = Reader()
+    reader.data = data
+    strm = async_stream(reader)
+    if error:
+        with pytest.raises(error):
+            evts = []
+            async for event in strm:
+                evts.append(event)
+        assert evts == events
+    else:
+        assert [e async for e in strm] == events
+
