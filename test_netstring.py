@@ -5,6 +5,18 @@ from hypothesis.strategies import binary
 from netstring import Connection, NetstringError, NEED_DATA
 
 
+DATA_EVENTS = [
+    (b'bad', [], NetstringError),
+    (b'10:almost good,', [], NetstringError),
+    (b'12:almost good,', [], None),
+    (b'4:good,bad', [b'good'], NetstringError),
+    (b'13:13:recursive1,', [b'13:recursive1'], None),
+    (b'14:14:recursive2,,', [b'14:recursive2,'], None),
+    (b'3:foo,', [b"foo"], None),
+    (b'46:{"id": 0, "method": "hello", "jsonrpc": "2.0"},', [b'{"id": 0, "method": "hello", "jsonrpc": "2.0"}'], None),
+]
+
+
 @given(binary())
 def test_netstring(payload):
     conn = Connection()
@@ -33,6 +45,18 @@ def test_netstring(payload):
     with pytest.raises(NetstringError):
         conn.receive_data(b"Hello, world!")
 
+
+@pytest.mark.parametrize("data, events, error", DATA_EVENTS)
+def test_concrete(data, events, error):
+    conn = Connection()
+    if error:
+        evts = []
+        with pytest.raises(error):
+            for evt in stream_data(conn, data):
+                evts.append(evt)
+    else:
+        evts = list(stream_data(conn, data))
+    assert evts == events
 
 
 @given(binary())

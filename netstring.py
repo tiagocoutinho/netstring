@@ -7,7 +7,8 @@
 
 __version__ = "0.1.0"
 
-
+END = b','
+END_ORD = ord(END)
 NEED_DATA = object()
 
 
@@ -32,7 +33,7 @@ class Connection:
 
     def send_data(self, event):
         """Convert a high-level event into bytes that can be sent to the peer"""
-        return f"{len(event)}:".encode() + event + b","
+        return f"{len(event)}:".encode() + event + END
 
     def receive_data(self, data):
         """Feed network data into the connection instance.
@@ -68,18 +69,25 @@ class Connection:
         Raises ValueError or TypeError if the data feed is malformed
         """
         if not self._receive_buffer:
-            return NEED_DATA
+            return None if self._receive_buffer_closed else NEED_DATA
         try:
-            idx = self._receive_buffer.index(b":")
+            ndig = self._receive_buffer.index(b":")
         except ValueError:
+            try:
+                int(self._receive_buffer)
+            except ValueError:
+                self.close()
+                raise NetstringError("Received data with invalid format")
             return NEED_DATA
-        n = int(self._receive_buffer[0:idx])
-        ndig = len(str(n))
+        n = int(self._receive_buffer[0:ndig])
         start = ndig + 1
         end = start + n + 1
         if len(self._receive_buffer) < end:
             return NEED_DATA
         result = self._receive_buffer[start:end - 1]
+        if self._receive_buffer[end - 1] != END_ORD:
+            self.close()
+            raise NetstringError("Received data with invalid format")
         self._receive_buffer = self._receive_buffer[end:]
         return result
 
