@@ -1,17 +1,25 @@
+# -*- coding: utf-8 -*-
+#
+# This file is part of the python-netstring project
+#
+# Copyright (c) 2021-2022 Tiago Coutinho
+# Distributed under the GPLv3 license. See LICENSE for more info.
+
 import io
 
 import pytest
 from hypothesis import given, example
 from hypothesis.strategies import binary
 
-from netstring import Connection, NetstringError, NEED_DATA, stream_data, stream, async_stream
+from netstring import Connection, NEED_DATA, CONNECTION_CLOSED
+from netstring import reads, async_reads, stream_data, stream, async_stream
 
 
 DATA_EVENTS = [
-    (b'bad', [], NetstringError),
-    (b'10:almost good,', [], NetstringError),
+    (b'bad', [], ValueError),
+    (b'10:almost good,', [], ValueError),
     (b'12:almost good,', [], None),
-    (b'4:good,bad', [b'good'], NetstringError),
+    (b'4:good,bad', [b'good'], ValueError),
     (b'13:13:recursive1,', [b'13:recursive1'], None),
     (b'14:14:recursive2,,', [b'14:recursive2,'], None),
     (b'3:foo,', [b"foo"], None),
@@ -49,7 +57,7 @@ def test_netstring(payload):
 
     conn.receive_data(b"")
     assert conn.trailing_data == (b"", True)
-    with pytest.raises(NetstringError):
+    with pytest.raises(ValueError):
         conn.receive_data(b"Hello, world!")
 
 
@@ -101,12 +109,93 @@ def test_close():
 
     assert conn.next_event() == NEED_DATA
     conn.receive_data(b"")
-    with pytest.raises(NetstringError):
+    assert conn.closed
+    with pytest.raises(ValueError):
         conn.receive_data(b"Hello, world!")
+
+    conn = Connection()
+    conn.close()
+    assert conn.closed
+    assert conn.next_event() == CONNECTION_CLOSED
+    with pytest.raises(ValueError):
+        conn.receive_data(b"5:Hello,")
+    assert conn.next_event() == CONNECTION_CLOSED
+
+    conn = Connection()
+    conn.receive_data(b"5:Hello,")
+    conn.close()
+    assert conn.closed
+    assert conn.next_event() == CONNECTION_CLOSED
+
+    conn = Connection()
+    conn.receive_data(b"5:Hello!")
+    with pytest.raises(ValueError):
+        conn.next_event()
+    assert conn.closed
+    assert conn.next_event() == CONNECTION_CLOSED
+
+    conn = Connection()
+    conn.receive_data(b"5")
+    assert conn.next_event() == NEED_DATA
+    conn.receive_data(b"b")
+    with pytest.raises(ValueError):
+        conn.next_event()
+    assert conn.closed
+
+    conn = Connection()
+    for c in b"5:Hello":
+        conn.receive_data(bytes([c]))
+        assert conn.next_event() == NEED_DATA
+    conn.receive_data(b":")
+    with pytest.raises(ValueError):
+        conn.next_event()
+    assert conn.closed
+
+
+#@pytest.mark.parametrize("data", [d[0] for d in DATA_EVENTS], ids=idfn)
+@given(binary())
+def test_reads(data):
+    reader = io.BytesIO(data)
+    strm = reads(reader)
+    result = b"".join(item for item in strm)
+    assert result == data
+
+
+@pytest.mark.asyncio
+@given(binary())
+async def test_async_reads(data):
+    class Reader:
+        async def read(self, size):
+            result = self.data[:size]
+            self.data = self.data[size:]
+            return result
+    reader = Reader()
+    reader.data = data
+    strm = async_reads(reader)
+    result = b"".join([item async for item in strm])
+    assert result == data
 
 
 @pytest.mark.parametrize("data, events, error", DATA_EVENTS, ids=idfn)
-def test_stream(data, events, error):
+def test_stream_gen(data, events, error):
+    def source(data):
+        while data:
+            evt, data = data[:4096], data[4096:]
+            yield evt
+    src = source(data)
+    strm = stream(src)
+    if error:
+        with pytest.raises(error):
+            evts = []
+            for event in strm:
+                evts.append(event)
+        assert evts == events
+    else:
+        assert list(strm) == events
+
+
+@pytest.mark.parametrize("data, events, error", DATA_EVENTS, ids=idfn)
+def test_stream_file(data, events, error):
     reader = io.BytesIO(data)
     strm = stream(reader)
     if error:
@@ -122,14 +211,12 @@ def test_stream(data, events, error):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("data, events, error", DATA_EVENTS, ids=idfn)
 async def test_async_stream(data, events, error):
-    class Reader:
-        async def read(self, size):
-            result = self.data[:size]
-            self.data = self.data[size:]
-            return result
-    reader = Reader()
-    reader.data = data
-    strm = async_stream(reader)
+    async def source(data):
+        while data:
+            evt, data = data[:4096], data[4096:]
+            yield evt
+    src = source(data)
+    strm = async_stream(src)
     if error:
         with pytest.raises(error):
             evts = []
