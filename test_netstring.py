@@ -12,7 +12,9 @@ from hypothesis import given, example
 from hypothesis.strategies import binary
 
 from netstring import Connection, decode, encode, NEED_DATA, CONNECTION_CLOSED
-from netstring import reads, async_reads, stream_data, stream, async_stream
+from netstring import reads, async_reads
+from netstring import stream_payload_data, stream_payload, async_stream_payload
+from netstring import stream_frame, async_stream_frame
 
 
 DATA_EVENTS = [
@@ -94,10 +96,10 @@ def test_concrete(data, events, error):
     if error:
         evts = []
         with pytest.raises(error):
-            for evt in stream_data(conn, data):
+            for evt in stream_payload_data(conn, data):
                 evts.append(evt)
     else:
-        evts = list(stream_data(conn, data))
+        evts = list(stream_payload_data(conn, data))
     assert evts == events
 
 
@@ -204,13 +206,13 @@ async def test_async_reads(data):
 
 
 @pytest.mark.parametrize("data, events, error", DATA_EVENTS, ids=idfn)
-def test_stream_gen(data, events, error):
+def test_stream_payload_gen(data, events, error):
     def source(data):
         while data:
             evt, data = data[:4096], data[4096:]
             yield evt
     src = source(data)
-    strm = stream(src)
+    strm = stream_payload(src)
     if error:
         with pytest.raises(error):
             evts = []
@@ -222,9 +224,9 @@ def test_stream_gen(data, events, error):
 
 
 @pytest.mark.parametrize("data, events, error", DATA_EVENTS, ids=idfn)
-def test_stream_file(data, events, error):
+def test_stream_payload_file(data, events, error):
     reader = io.BytesIO(data)
-    strm = stream(reader)
+    strm = stream_payload(reader)
     if error:
         with pytest.raises(error):
             evts = []
@@ -237,13 +239,13 @@ def test_stream_file(data, events, error):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("data, events, error", DATA_EVENTS, ids=idfn)
-async def test_async_stream(data, events, error):
+async def test_async_stream_payload(data, events, error):
     async def source(data):
         while data:
             evt, data = data[:4096], data[4096:]
             yield evt
     src = source(data)
-    strm = async_stream(src)
+    strm = async_stream_payload(src)
     if error:
         with pytest.raises(error):
             evts = []
@@ -253,3 +255,26 @@ async def test_async_stream(data, events, error):
     else:
         assert [e async for e in strm] == events
 
+
+@pytest.mark.parametrize(
+    "payloads, expected",
+    [
+        [[b"f1", b"f2", b"f3"], [b"2:f1,", b"2:f2,", b"2:f3,"]]
+    ]
+)
+def test_stream_frame_gen(payloads, expected):
+    assert list(stream_frame(payloads)) == expected
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "payloads, expected",
+    [
+        [[b"f1", b"f2", b"f3"], [b"2:f1,", b"2:f2,", b"2:f3,"]]
+    ]
+)
+async def test_async_stream_frame_gen(payloads, expected):
+    async def source():
+        for data in payloads:
+            yield data
+    assert [e async for e in async_stream_frame(source())] == expected

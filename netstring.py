@@ -123,7 +123,7 @@ class Connection:
             yield event
 
 
-def stream_data(conn, data):
+def stream_payload_data(conn, data):
     """Feeds the connection with the given data and yields its events"""
     conn.receive_data(data)
     for event in conn:
@@ -150,15 +150,15 @@ async def async_reads(reader, size=4096):
     Useful to consume from any async reader with read(size) method (ex: file
     like  object, asyncio.StreamReader) into an async generator.
 
-    with open("messages.ns", "rb") as reader:
-        for chunk in reads(reader):
+    async with aiofile.open("messages.ns", "rb") as reader:
+        async for chunk in reads(reader):
             print(f"{chunk = !r}")
     """
     while data := await reader.read(size):
         yield data
 
 
-def stream(source):
+def stream_payload(source):
     """
     Consumes the source yielding its events.
     Source must be iterable. If you intend the source to be a file like
@@ -172,10 +172,10 @@ def stream(source):
     """
     conn = Connection()
     for chunk in source:
-        yield from stream_data(conn, chunk)
+        yield from stream_payload_data(conn, chunk)
 
 
-async def async_stream(source):
+async def async_stream_payload(source):
     """
     Consumes the source yielding its events.
     Source must be iterable. If you intend the source to be an async reader
@@ -190,6 +190,17 @@ async def async_stream(source):
     """
     conn = Connection()
     async for chunk in source:
-        for event in stream_data(conn, chunk):
+        for event in stream_payload_data(conn, chunk):
             yield event
 
+
+def stream_frame(source):
+    """Consumes payloads and generating one netstring frame per payload"""
+    for payload in source:
+        yield encode(payload)
+
+
+async def async_stream_frame(source):
+    """Consumes payloads from an async source generating one netstring frame per payload"""
+    async for payload in source:
+        yield encode(payload)
