@@ -5,7 +5,7 @@
 # Copyright (c) 2021-2022 Tiago Coutinho
 # Distributed under the GPLv3 license. See LICENSE for more info.
 
-__version__ = "0.4.0"
+__version__ = "0.5.0"
 
 END = b","
 END_ORD = ord(END)
