@@ -18,22 +18,26 @@ from netstring import stream_frame, async_stream_frame
 
 
 DATA_EVENTS = [
-    (b'bad', [], ValueError),
-    (b'10:almost good,', [], ValueError),
-    (b'11:       good,', [b'       good'], None),
-    (b'12:almost good,', [], None),
-    (b'4:good,bad', [b'good'], ValueError),
-    (b'13:13:recursive1,', [b'13:recursive1'], None),
-    (b'14:14:recursive2,,', [b'14:recursive2,'], None),
-    (b'3:foo,', [b"foo"], None),
-    (b'46:{"id": 0, "method": "hello", "jsonrpc": "2.0"},',
-     [b'{"id": 0, "method": "hello", "jsonrpc": "2.0"}'], None),
-    (2*(b'1000000:'+1000000*b'$'+b','), 2*[1000000*b'$'], None),
+    (b"bad", [], ValueError),
+    (b"10:almost good,", [], ValueError),
+    (b"11:       good,", [b"       good"], None),
+    (b"12:almost good,", [], None),
+    (b"4:good,bad", [b"good"], ValueError),
+    (b"13:13:recursive1,", [b"13:recursive1"], None),
+    (b"14:14:recursive2,,", [b"14:recursive2,"], None),
+    (b"3:foo,", [b"foo"], None),
+    (
+        b'46:{"id": 0, "method": "hello", "jsonrpc": "2.0"},',
+        [b'{"id": 0, "method": "hello", "jsonrpc": "2.0"}'],
+        None,
+    ),
+    (2 * (b"1000000:" + 1000000 * b"$" + b","), 2 * [1000000 * b"$"], None),
 ]
+
 
 def idfn(v):
     if isinstance(v, bytes):
-        return v[:15] + b'[...]' if len(v) > 20 else v[:20]
+        return v[:15] + b"[...]" if len(v) > 20 else v[:20]
 
 
 @given(binary())
@@ -67,21 +71,24 @@ def test_netstring(payload):
 
 @given(binary())
 def test_encode(payload):
-    assert f'{len(payload)}:'.encode() + payload + b',' == encode(payload)
+    assert f"{len(payload)}:".encode() + payload + b"," == encode(payload)
 
 
 @pytest.mark.parametrize(
     "data, value",
     [
-        (b'bad', ValueError),
-        (b'10:almost good,', ValueError),
-        (b'14:incomplete', ValueError),
-        (b'11:       good,', b'       good'),
-        (b'46:{"id": 0, "method": "hello", "jsonrpc": "2.0"},',
-         b'{"id": 0, "method": "hello", "jsonrpc": "2.0"}'),
-        (b'1000000:'+1_000_000*b'$'+b',', 1_000_000*b'$')
+        (b"bad", ValueError),
+        (b"10:almost good,", ValueError),
+        (b"14:incomplete", ValueError),
+        (b"11:       good,", b"       good"),
+        (
+            b'46:{"id": 0, "method": "hello", "jsonrpc": "2.0"},',
+            b'{"id": 0, "method": "hello", "jsonrpc": "2.0"}',
+        ),
+        (b"1000000:" + 1_000_000 * b"$" + b",", 1_000_000 * b"$"),
     ],
-    ids=idfn)
+    ids=idfn,
+)
 def test_decode(data, value):
     if isinstance(value, bytes):
         assert decode(data) == value
@@ -181,7 +188,7 @@ def test_close():
     assert conn.closed
 
 
-#@pytest.mark.parametrize("data", [d[0] for d in DATA_EVENTS], ids=idfn)
+# @pytest.mark.parametrize("data", [d[0] for d in DATA_EVENTS], ids=idfn)
 @given(binary())
 def test_reads(data):
     reader = io.BytesIO(data)
@@ -198,6 +205,7 @@ async def test_async_reads(data):
             result = self.data[:size]
             self.data = self.data[size:]
             return result
+
     reader = Reader()
     reader.data = data
     strm = async_reads(reader)
@@ -211,6 +219,7 @@ def test_stream_payload_gen(data, events, error):
         while data:
             evt, data = data[:4096], data[4096:]
             yield evt
+
     src = source(data)
     strm = stream_payload(src)
     if error:
@@ -244,6 +253,7 @@ async def test_async_stream_payload(data, events, error):
         while data:
             evt, data = data[:4096], data[4096:]
             yield evt
+
     src = source(data)
     strm = async_stream_payload(src)
     if error:
@@ -257,10 +267,7 @@ async def test_async_stream_payload(data, events, error):
 
 
 @pytest.mark.parametrize(
-    "payloads, expected",
-    [
-        [[b"f1", b"f2", b"f3"], [b"2:f1,", b"2:f2,", b"2:f3,"]]
-    ]
+    "payloads, expected", [[[b"f1", b"f2", b"f3"], [b"2:f1,", b"2:f2,", b"2:f3,"]]]
 )
 def test_stream_frame_gen(payloads, expected):
     assert list(stream_frame(payloads)) == expected
@@ -268,13 +275,11 @@ def test_stream_frame_gen(payloads, expected):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "payloads, expected",
-    [
-        [[b"f1", b"f2", b"f3"], [b"2:f1,", b"2:f2,", b"2:f3,"]]
-    ]
+    "payloads, expected", [[[b"f1", b"f2", b"f3"], [b"2:f1,", b"2:f2,", b"2:f3,"]]]
 )
 async def test_async_stream_frame_gen(payloads, expected):
     async def source():
         for data in payloads:
             yield data
+
     assert [e async for e in async_stream_frame(source())] == expected

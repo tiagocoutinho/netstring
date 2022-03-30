@@ -7,7 +7,7 @@
 
 __version__ = "0.3.0"
 
-END = b','
+END = b","
 END_ORD = ord(END)
 NEED_DATA = object()
 CONNECTION_CLOSED = object()
@@ -31,14 +31,13 @@ def decode(frame):
     end = start + n + 1
     if len(frame) < end:
         raise ValueError("Incomplete frame")
-    result = frame[start:end - 1]
+    result = frame[start : end - 1]
     if frame[end - 1] != END_ORD:
         raise ValueError("Received frame with invalid format")
     return result
 
 
 class Connection:
-
     def __init__(self):
         self._receive_buffer = b""
         self.closed = False
@@ -107,7 +106,7 @@ class Connection:
         end = start + n + 1
         if len(self._receive_buffer) < end:
             return CONNECTION_CLOSED if self.closed else NEED_DATA
-        result = self._receive_buffer[start:end - 1]
+        result = self._receive_buffer[start : end - 1]
         if self._receive_buffer[end - 1] != END_ORD:
             self.close()
             raise ValueError("Received data with invalid format")
