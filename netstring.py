@@ -37,6 +37,10 @@ def decode(frame):
     return result
 
 
+dumps = encode
+loads = decode
+
+
 class Connection:
     def __init__(self):
         self._receive_buffer = b""
@@ -123,7 +127,7 @@ class Connection:
 
 
 def stream_payload_data(conn, data):
-    """Feeds the connection with the given data and yields its events"""
+    """Feeds the connection with the given data and yields payload events"""
     conn.receive_data(data)
     for event in conn:
         yield event
@@ -159,7 +163,7 @@ async def async_reads(reader, size=4096):
 
 def stream_payload(source):
     """
-    Consumes the source yielding its events.
+    Consumes the source of netstring frames and yields payloads.
     Source must be iterable. If you intend the source to be a file like
     object, don't pass it directly since file iterators read until the EOL
     character. Instead use the reads() helper. Example:
@@ -176,10 +180,10 @@ def stream_payload(source):
 
 async def async_stream_payload(source):
     """
-    Consumes the source yielding its events.
-    Source must be iterable. If you intend the source to be an async reader
-    like object (ex: asyncio.StreamReader, aiofile.File), don't pass it
-    directly since reader iterators read until the EOL character.
+    Consumes the async source of netstring frames and yields payloads
+    Source must be async iterable. If you intend the source to be an async
+    reader like object (ex: asyncio.StreamReader, aiofile.File), don't pass
+    it directly since reader iterators read until the EOL character.
     Instead use the async_reads() helper. Example:
 
     with open("messages.ns", "rb") as reader:
@@ -194,12 +198,19 @@ async def async_stream_payload(source):
 
 
 def stream_frame(source):
-    """Consumes payloads and generating one netstring frame per payload"""
+    """Consumes the source of payloads and yields one netstring frame per payload"""
     for payload in source:
         yield encode(payload)
 
 
 async def async_stream_frame(source):
-    """Consumes payloads from an async source generating one netstring frame per payload"""
+    """Consumes async source of payloads and yields one netstring frame per payload"""
     async for payload in source:
         yield encode(payload)
+
+
+stream_dumps_data = stream_payload_data
+stream_dumps = stream_payload
+stream_loads = stream_frame
+async_stream_dumps = async_stream_payload
+async_stream_loads = async_stream_frame
