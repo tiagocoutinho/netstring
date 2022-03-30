@@ -11,20 +11,22 @@ import pytest
 from hypothesis import given, example
 from hypothesis.strategies import binary
 
-from netstring import Connection, NEED_DATA, CONNECTION_CLOSED
+from netstring import Connection, decode, encode, NEED_DATA, CONNECTION_CLOSED
 from netstring import reads, async_reads, stream_data, stream, async_stream
 
 
 DATA_EVENTS = [
     (b'bad', [], ValueError),
     (b'10:almost good,', [], ValueError),
+    (b'11:       good,', [b'       good'], None),
     (b'12:almost good,', [], None),
     (b'4:good,bad', [b'good'], ValueError),
     (b'13:13:recursive1,', [b'13:recursive1'], None),
     (b'14:14:recursive2,,', [b'14:recursive2,'], None),
     (b'3:foo,', [b"foo"], None),
-    (b'46:{"id": 0, "method": "hello", "jsonrpc": "2.0"},', [b'{"id": 0, "method": "hello", "jsonrpc": "2.0"}'], None),
-    (2*(b'1000000:'+1000000*b'$'+b','), 2*[+1000000*b'$'], None),
+    (b'46:{"id": 0, "method": "hello", "jsonrpc": "2.0"},',
+     [b'{"id": 0, "method": "hello", "jsonrpc": "2.0"}'], None),
+    (2*(b'1000000:'+1000000*b'$'+b','), 2*[1000000*b'$'], None),
 ]
 
 def idfn(v):
@@ -59,6 +61,31 @@ def test_netstring(payload):
     assert conn.trailing_data == (b"", True)
     with pytest.raises(ValueError):
         conn.receive_data(b"Hello, world!")
+
+
+@given(binary())
+def test_encode(payload):
+    assert f'{len(payload)}:'.encode() + payload + b',' == encode(payload)
+
+
+@pytest.mark.parametrize(
+    "data, value",
+    [
+        (b'bad', ValueError),
+        (b'10:almost good,', ValueError),
+        (b'14:incomplete', ValueError),
+        (b'11:       good,', b'       good'),
+        (b'46:{"id": 0, "method": "hello", "jsonrpc": "2.0"},',
+         b'{"id": 0, "method": "hello", "jsonrpc": "2.0"}'),
+        (b'1000000:'+1_000_000*b'$'+b',', 1_000_000*b'$')
+    ],
+    ids=idfn)
+def test_decode(data, value):
+    if isinstance(value, bytes):
+        assert decode(data) == value
+    else:
+        with pytest.raises(value):
+            decode(data)
 
 
 @pytest.mark.parametrize("data, events, error", DATA_EVENTS, ids=idfn)

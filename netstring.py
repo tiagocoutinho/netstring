@@ -13,6 +13,30 @@ NEED_DATA = object()
 CONNECTION_CLOSED = object()
 
 
+def encode(payload):
+    """
+    Convert a payload (bytes) to a netstring frame.
+    """
+    return f"{len(payload)}:".encode() + payload + END
+
+
+def decode(frame):
+    """
+    Retrieve payload from the frame (bytes). Frame must be a complete netstring
+    frame otherwise ValueError exception is raised.
+    """
+    ndig = frame.index(b":")
+    n = int(frame[0:ndig])
+    start = ndig + 1
+    end = start + n + 1
+    if len(frame) < end:
+        raise ValueError("Incomplete frame")
+    result = frame[start:end - 1]
+    if frame[end - 1] != END_ORD:
+        raise ValueError("Received frame with invalid format")
+    return result
+
+
 class Connection:
 
     def __init__(self):
@@ -30,7 +54,7 @@ class Connection:
 
     def send_data(self, event):
         """Convert a high-level event into bytes that can be sent to the peer"""
-        return f"{len(event)}:".encode() + event + END
+        return encode(event)
 
     def receive_data(self, data):
         """Feed network data into the connection instance.
