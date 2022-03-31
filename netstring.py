@@ -209,8 +209,8 @@ async def async_stream_frame(source):
         yield encode(payload)
 
 
-stream_dumps_data = stream_payload_data
-stream_dumps = stream_payload
-stream_loads = stream_frame
-async_stream_dumps = async_stream_payload
-async_stream_loads = async_stream_frame
+stream_loads_data = stream_payload_data
+stream_loads = stream_payload
+stream_dumps = stream_frame
+async_stream_loads = async_stream_payload
+async_stream_dumps = async_stream_frame
